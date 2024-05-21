@@ -130,3 +130,52 @@ for i in range(5):
 plt.xlabel('FACS')
 plt.ylabel('Mother Machine')
 plt.show()
+
+#%%
+# Train an LDA one-hot model to predict new sequences
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import balanced_accuracy_score
+
+def one_hot_encode(alphabet, sequences):
+    X = np.array([list(map(alphabet.index, seq)) for seq in sequences])
+    X = np.eye(len(alphabet))[X].reshape(len(sequences), -1)
+    return X
+
+def one_hot_decode(alphabet, encoded):
+    X = encoded.reshape(len(encoded), len(starting_sequence), len(alphabet))
+    X = np.array([''.join([alphabet[np.argmax(aa)] for aa in x]) for x in X])
+    return X
+
+#%%
+X = one_hot_encode(alphabet, single_mutants)
+y = np.array(single_mutant_fitness) > np.percentile(single_mutant_fitness, 90)
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
+
+lda = LinearDiscriminantAnalysis(n_components=1)
+lda.fit(X_train, y_train)
+
+print(balanced_accuracy_score(y_test, lda.predict(X_test)))
+
+#%%
+# Design new sequence using the weights of the LDA model
+# designed_variant = ''.join([alphabet[i] for i in lda.coef_.reshape(len(starting_sequence), len(alphabet)).argmax(axis=1)])
+# print(landscape.get_fitness([designed_variant]))
+
+params = lda.coef_.copy()[0]
+
+# Set the coefs of _no mutation_ to be much lower to favour making mutations
+# Found by trial and error that 0.01 gives the best designed_variant score
+params = params.reshape(len(starting_sequence), len(alphabet))
+for i in range(len(starting_sequence)):
+    params[i, alphabet.index(starting_sequence[i])] *= 0.01
+params = params.reshape(1, -1)
+
+designed_variant = one_hot_decode(alphabet, params)[0]
+print(landscape.get_fitness([designed_variant]))
+
+# %%
+muts = [f'{aa1}{i}{aa2}' for aa1, i, aa2 in zip(starting_sequence, range(len(starting_sequence)), designed_variant) if aa1 != aa2]
+print(f"Made {len(muts)} mutations.")
+# %%
