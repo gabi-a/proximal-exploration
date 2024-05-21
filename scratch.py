@@ -369,7 +369,7 @@ np.random.seed(0)
 ## Essentially the model can most of the time improve upon
 ## sequences that havea lowish fitness that is near the threshold value.
 ## BUT 
-## It usually makes _worse_ sequences that are very good!! 
+## It usually makes _worse_ sequences from ones that are very good!! 
 ## This is somewhat addressed by mutate_sequence_orthadox which
 ## only allows up to 2 total mutations from the starting sequence
 ##
@@ -379,7 +379,7 @@ for start_from in [starting_sequence] + list(np.array(all_mutants)[y]):
         starting_sequence=start_from, 
         temperature=1.0, 
         cooling_rate=0.01, 
-        num_iterations=10000,
+        num_iterations=1000,
         mutate_fn=mutate_sequence_orthadox)
     print(f"{landscape.get_fitness([start_from])[0]:.3f} -> {landscape.get_fitness([best_sequence])[0]:.3f}")
 
