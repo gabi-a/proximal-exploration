@@ -175,15 +175,22 @@ params = params.reshape(1, -1)
 designed_variant = one_hot_decode(alphabet, params)[0]
 print(landscape.get_fitness([designed_variant]))
 
-muts = [f'{aa1}{i}{aa2}' for aa1, i, aa2 in zip(starting_sequence, range(len(starting_sequence)), designed_variant) if aa1 != aa2]
-print(f"Made {len(muts)} mutations.")
+#%%
+muts = lambda designed_variant: [f'{aa1}{i}{aa2}' for aa1, i, aa2 in zip(starting_sequence, range(len(starting_sequence)), designed_variant) if aa1 != aa2]
+print(f"Made {len(muts(designed_variant))} mutations.")
 
 # %%
 # Again but using double mutant data
-X = one_hot_encode(alphabet, sampled_double_mutants)
-y = np.array(double_mutant_fitness) > np.percentile(double_mutant_fitness, 90)
+all_mutants = single_mutants + list(sampled_double_mutants)
+all_fitnesses = np.concatenate([single_mutant_fitness, double_mutant_fitness])
+X = one_hot_encode(alphabet, all_mutants)
+y = np.array(all_fitnesses) > np.percentile(all_fitnesses, 80)
 
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
+
+from imblearn.over_sampling import RandomOverSampler
+
+X_train, y_train = RandomOverSampler().fit_resample(X_train, y_train)
 
 lda = LinearDiscriminantAnalysis(n_components=1)
 lda.fit(X_train, y_train)
@@ -205,11 +212,164 @@ designed_variant = one_hot_decode(alphabet, params)[0]
 print(landscape.get_fitness([starting_sequence]))
 print(landscape.get_fitness([designed_variant]))
 
-muts = [f'{aa1}{i}{aa2}' for aa1, i, aa2 in zip(starting_sequence, range(len(starting_sequence)), designed_variant) if aa1 != aa2]
-print(f"Made {len(muts)} mutations.")
+print(f"Made {len(muts(designed_variant))} mutations.")
 
 # NOTES
 # So far, this approach is not great
 # because the best screened single mutant has a fitness of >3.5
 # but the designed variants have fitness ~1.5 (which is greater than the starting sequence!)
+
+#%%
+
+# get the sequence of the best single mutant
+best_single_mutant = single_mutants[np.argmax(single_mutant_fitness)]
+
+print(best_single_mutant)
+print(landscape.get_fitness([best_single_mutant]))
+
+X_starting = one_hot_encode(alphabet, [starting_sequence])
+X_best = one_hot_encode(alphabet, [best_single_mutant])
+
+print(lda.coef_ @ X_starting.T + lda.intercept_)
+print(lda.coef_ @ X_best.T + lda.intercept_)
+
+#%%
+def continuos_fitness_prediction(lda, sequence):
+    X = one_hot_encode(alphabet, [sequence])
+    return lda.coef_ @ X.T + lda.intercept_
+
+#%%
+# Simulated annealing starting from the initial sequence
+# and using the LDA model to predict the fitness of new sequences
+
+def mutate_sequence(sequence):
+    # Perform a single random mutation
+    idx_mutate = np.random.randint(len(sequence))
+    new_aa = alphabet[np.random.randint(0, len(alphabet))]
+    new_sequence = sequence[:idx_mutate] + new_aa + sequence[idx_mutate+1:]
+    return new_sequence
+
+def mutate_sequence_conservative(sequence, starting_sequence=starting_sequence):
+    _starting_sequence = list(starting_sequence)
+    _sequence = list(sequence)
+    idxs = [i for i in range(len(_starting_sequence)) if _starting_sequence[i] != _sequence[i]]
+    if len(idxs) == 0:
+        idx_mutate = np.random.randint(len(sequence))
+    else:
+        if np.random.rand() < 0.75:
+            idx_mutate = np.random.choice(idxs)
+        else:
+            idx_mutate = np.random.randint(len(sequence))
+            print("New mutation")
+    new_aa = alphabet[np.random.randint(0, len(alphabet))]
+    new_sequence = sequence[:idx_mutate] + new_aa + sequence[idx_mutate+1:]
+    return new_sequence
+
+def mutate_sequence_orthadox(sequence, starting_sequence=starting_sequence):
+    _starting_sequence = list(starting_sequence)
+    _sequence = list(sequence)
+    idxs = [i for i in range(len(_starting_sequence)) if _starting_sequence[i] != _sequence[i]]
+    if len(idxs) == 0:
+        return mutate_sequence(sequence)
+    else:
+        existing_mutation = np.random.choice(idxs)
+        new_aa = alphabet[np.random.randint(0, len(alphabet))]
+        probs = np.exp(-((np.arange(len(sequence)) - existing_mutation) ** 2) / 2)
+        probs /= probs.sum()
+        mutation_idx = np.random.choice(len(sequence), p=probs)
+        new_sequence = starting_sequence[:mutation_idx] + new_aa + starting_sequence[mutation_idx+1:]
+        return new_sequence
+    
+def mutate_sequence_reform(sequence, starting_sequence=starting_sequence):
+    if np.random.rand() < 0.01:
+        return mutate_sequence(sequence)
+    else:
+        return mutate_sequence_orthadox(sequence, starting_sequence)
+
+#%%
+## This doesn't improve things
+#
+# import blosum as bl
+# matrix = bl.BLOSUM(62)
+
+# def mutate_sequence_blosum62(sequence):
+#     # Perform a single random mutation using the BLOSUM62 matrix for the probabilities
+#     idx_mutate = np.random.randint(len(sequence))
+    
+#     # Get the probabilities of each amino acid mutation
+#     probs = np.exp([matrix[sequence[idx_mutate]][k] for k in alphabet])
+#     probs /= probs.sum()
+#     new_aa = np.random.choice(list(alphabet), p=probs)
+
+#     new_sequence = sequence[:idx_mutate] + new_aa + sequence[idx_mutate+1:]
+#     return new_sequence
+
+#%%
+def calculate_acceptance_probability(current_fitness, candidate_fitness, temperature):
+    # Calculate the acceptance probability based on the fitness difference and temperature
+    if candidate_fitness > current_fitness:
+        return 1
+    else:
+        return np.exp((candidate_fitness - current_fitness) / temperature)
+
+def run_simulated_annealing(
+    lda,
+    starting_sequence,
+    temperature=1.0,
+    cooling_rate=0.01,
+    num_iterations=1000,
+    mutate_fn=mutate_sequence
+):
+    current_sequence = starting_sequence
+    current_fitness = continuos_fitness_prediction(lda, current_sequence).squeeze()
+    best_sequence = current_sequence
+    best_fitness = current_fitness
+    
+    for i in range(num_iterations):
+        
+        if i % 100 == 0:
+            print(f"Current fitness (oracle): {landscape.get_fitness([current_sequence])[0]:.3f}")
+            print(f"Current fitness (LDA): {current_fitness:.3f}")
+        
+        # Generate a new candidate sequence by making a random mutation
+        candidate_sequence = mutate_fn(current_sequence)
+        candidate_fitness = continuos_fitness_prediction(lda, candidate_sequence).squeeze()
+    
+        # Calculate the acceptance probability based on the fitness difference
+        acceptance_probability = calculate_acceptance_probability(current_fitness, candidate_fitness, temperature)
+        
+        # Accept the candidate sequence with a certain probability
+        if acceptance_probability >= np.random.rand():
+            print('ap', acceptance_probability)
+            print('temp', temperature)
+            print('cf', current_fitness)
+            print('cs', candidate_fitness)
+            current_sequence = candidate_sequence
+            current_fitness = candidate_fitness
+        
+        # Update the best sequence and fitness if necessary
+        if candidate_fitness > best_fitness:
+            best_sequence = candidate_sequence
+            best_fitness = candidate_fitness
+        
+        # Cool down the temperature
+        temperature *= (1 - cooling_rate)
+    
+    return best_sequence, best_fitness
+
+# Call the simulated annealing function with the necessary parameters
+np.random.seed(5)
+best_sequence, best_fitness = run_simulated_annealing(
+    lda, 
+    starting_sequence, 
+    temperature=1.0, 
+    cooling_rate=0.01, 
+    num_iterations=1000,
+    mutate_fn=mutate_sequence_reform)
+
+print("Best sequence:", best_sequence)
+print("Best fitness (oracle):", landscape.get_fitness([best_sequence])[0])
+print("Best fitness:", best_fitness)
+
+muts(best_sequence)
 # %%
