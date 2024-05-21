@@ -396,7 +396,8 @@ for start_from in tqdm([starting_sequence] + list(np.array(all_mutants)[y])):
         dups += 1
         continue
 
-    designed_sequences.append(best_sequence)
+    if continuos_fitness_prediction(lda, best_sequence) > continuos_fitness_prediction(lda, start_from):
+        designed_sequences.append(best_sequence)
 
     # print(muts(best_sequence))
     # print(f"{landscape.get_fitness([start_from])[0]:.3f} -> {landscape.get_fitness([best_sequence])[0]:.3f}")
@@ -409,12 +410,25 @@ for start_from in tqdm([starting_sequence] + list(np.array(all_mutants)[y])):
     # print("Best fitness:", best_fitness)
 
 designed_fitnesses = landscape.get_fitness(designed_sequences)
+
+#%%
+starting_sequences = [starting_sequence] + list(np.array(all_mutants)[y])
+starting_fitnesses = landscape.get_fitness(starting_sequences)
+
 # %%
+
+print(np.mean(starting_fitnesses))
+print(np.mean(designed_fitnesses))
+
 plt.figure()
-sns.histplot(single_mutant_fitness, bins=20, label='Single mutants', stat='density')
-sns.histplot(double_mutant_fitness, bins=20, label='Double mutants', stat='density')
-sns.histplot(designed_fitnesses, bins=20, label='Designed sequences', stat='density')
-plt.ylim(0, 0.1)
+bins = np.linspace(0, 5, 100)
+sns.histplot(single_mutant_fitness, bins=bins, label='Single mutants', stat='density', alpha=0.5)
+sns.histplot(double_mutant_fitness, bins=bins, label='Double mutants', stat='density', alpha=0.5)
+sns.histplot(starting_fitnesses, bins=bins, label='Starting sequences', stat='density', alpha=0.5)
+sns.histplot(designed_fitnesses, bins=bins, label='Designed sequences', stat='density', alpha=0.5)
+plt.ylim(0, 0.5)
+plt.xlim(1, 4)
 plt.xlabel('Fitness')
 plt.legend()
 plt.show()
+# %%
