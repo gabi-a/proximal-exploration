@@ -184,7 +184,11 @@ print(f"Made {len(muts(designed_variant))} mutations.")
 all_mutants = single_mutants + list(sampled_double_mutants)
 all_fitnesses = np.concatenate([single_mutant_fitness, double_mutant_fitness])
 X = one_hot_encode(alphabet, all_mutants)
-y = np.array(all_fitnesses) > np.percentile(all_fitnesses, 80)
+
+y = np.array(all_fitnesses) > np.percentile(all_fitnesses, 90)
+print("WARNING WARNING WARNING")
+print("Currently using only the top 10% of fitnesses as the positive class")
+print("WARNING WARNING WARNING")
 
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
 
@@ -209,8 +213,8 @@ params = params.reshape(1, -1)
 
 designed_variant = one_hot_decode(alphabet, params)[0]
 
-print(landscape.get_fitness([starting_sequence]))
-print(landscape.get_fitness([designed_variant]))
+print('Initial', landscape.get_fitness([starting_sequence])[0])
+print('Designed', landscape.get_fitness([designed_variant])[0])
 
 print(f"Made {len(muts(designed_variant))} mutations.")
 
@@ -271,6 +275,8 @@ def mutate_sequence_orthadox(sequence, starting_sequence=starting_sequence):
     idxs = [i for i in range(len(_starting_sequence)) if _starting_sequence[i] != _sequence[i]]
     if len(idxs) == 0:
         return mutate_sequence(sequence)
+    elif len(idxs) < 2 and np.random.rand() < 0.01:
+        return mutate_sequence(sequence)
     else:
         existing_mutation = np.random.choice(idxs)
         new_aa = alphabet[np.random.randint(0, len(alphabet))]
@@ -280,12 +286,6 @@ def mutate_sequence_orthadox(sequence, starting_sequence=starting_sequence):
         new_sequence = starting_sequence[:mutation_idx] + new_aa + starting_sequence[mutation_idx+1:]
         return new_sequence
     
-def mutate_sequence_reform(sequence, starting_sequence=starting_sequence):
-    if np.random.rand() < 0.01:
-        return mutate_sequence(sequence)
-    else:
-        return mutate_sequence_orthadox(sequence, starting_sequence)
-
 #%%
 ## This doesn't improve things
 #
@@ -327,9 +327,9 @@ def run_simulated_annealing(
     
     for i in range(num_iterations):
         
-        if i % 100 == 0:
-            print(f"Current fitness (oracle): {landscape.get_fitness([current_sequence])[0]:.3f}")
-            print(f"Current fitness (LDA): {current_fitness:.3f}")
+        # if i % 100 == 0:
+        #     print(f"Current fitness (oracle): {landscape.get_fitness([current_sequence])[0]:.3f}")
+        #     print(f"Current fitness (LDA): {current_fitness:.3f}")
         
         # Generate a new candidate sequence by making a random mutation
         candidate_sequence = mutate_fn(current_sequence)
@@ -340,10 +340,10 @@ def run_simulated_annealing(
         
         # Accept the candidate sequence with a certain probability
         if acceptance_probability >= np.random.rand():
-            print('ap', acceptance_probability)
-            print('temp', temperature)
-            print('cf', current_fitness)
-            print('cs', candidate_fitness)
+            # print('ap', acceptance_probability)
+            # print('temp', temperature)
+            # print('cf', current_fitness)
+            # print('cs', candidate_fitness)
             current_sequence = candidate_sequence
             current_fitness = candidate_fitness
         
@@ -358,18 +358,36 @@ def run_simulated_annealing(
     return best_sequence, best_fitness
 
 # Call the simulated annealing function with the necessary parameters
-np.random.seed(5)
-best_sequence, best_fitness = run_simulated_annealing(
-    lda, 
-    starting_sequence, 
-    temperature=1.0, 
-    cooling_rate=0.01, 
-    num_iterations=1000,
-    mutate_fn=mutate_sequence_reform)
+np.random.seed(0)
 
-print("Best sequence:", best_sequence)
-print("Best fitness (oracle):", landscape.get_fitness([best_sequence])[0])
-print("Best fitness:", best_fitness)
+# Pick one of the sequences in the top 10% of fitness to start with
+# start_from = starting_sequence
+
+
+##
+## Result of running the code below is quite interesting:
+## Essentially the model can most of the time improve upon
+## sequences that havea lowish fitness that is near the threshold value.
+## BUT 
+## It usually makes _worse_ sequences that are very good!! 
+## This is somewhat addressed by mutate_sequence_orthadox which
+## only allows up to 2 total mutations from the starting sequence
+##
+for start_from in [starting_sequence] + list(np.array(all_mutants)[y]):
+    best_sequence, best_fitness = run_simulated_annealing(
+        lda, 
+        starting_sequence=start_from, 
+        temperature=1.0, 
+        cooling_rate=0.01, 
+        num_iterations=10000,
+        mutate_fn=mutate_sequence_orthadox)
+    print(f"{landscape.get_fitness([start_from])[0]:.3f} -> {landscape.get_fitness([best_sequence])[0]:.3f}")
+
+    # print("Original fitness:", landscape.get_fitness([starting_sequence])[0])
+    # print("Starting fitness:", landscape.get_fitness([start_from])[0])
+    # print("Best sequence:", best_sequence)
+    # print("Best fitness (oracle):", landscape.get_fitness([best_sequence])[0])
+    # print("Best fitness:", best_fitness)
 
 muts(best_sequence)
 # %%
