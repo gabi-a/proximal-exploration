@@ -175,7 +175,41 @@ params = params.reshape(1, -1)
 designed_variant = one_hot_decode(alphabet, params)[0]
 print(landscape.get_fitness([designed_variant]))
 
-# %%
 muts = [f'{aa1}{i}{aa2}' for aa1, i, aa2 in zip(starting_sequence, range(len(starting_sequence)), designed_variant) if aa1 != aa2]
 print(f"Made {len(muts)} mutations.")
+
+# %%
+# Again but using double mutant data
+X = one_hot_encode(alphabet, sampled_double_mutants)
+y = np.array(double_mutant_fitness) > np.percentile(double_mutant_fitness, 90)
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
+
+lda = LinearDiscriminantAnalysis(n_components=1)
+lda.fit(X_train, y_train)
+
+print(balanced_accuracy_score(y_test, lda.predict(X_test)))
+
+#%%
+params = lda.coef_.copy()[0]
+
+# Now it seems we have to make the coefs of _no mutation_ higher 
+# to favour NOT making mutations??
+params = params.reshape(len(starting_sequence), len(alphabet))
+for i in range(len(starting_sequence)):
+    params[i, alphabet.index(starting_sequence[i])] += 70
+params = params.reshape(1, -1)
+
+designed_variant = one_hot_decode(alphabet, params)[0]
+
+print(landscape.get_fitness([starting_sequence]))
+print(landscape.get_fitness([designed_variant]))
+
+muts = [f'{aa1}{i}{aa2}' for aa1, i, aa2 in zip(starting_sequence, range(len(starting_sequence)), designed_variant) if aa1 != aa2]
+print(f"Made {len(muts)} mutations.")
+
+# NOTES
+# So far, this approach is not great
+# because the best screened single mutant has a fitness of >3.5
+# but the designed variants have fitness ~1.5 (which is greater than the starting sequence!)
 # %%
