@@ -48,9 +48,10 @@ single_mutant_fitness = np.array(single_mutant_fitness)
 
 #%%
 plt.figure()
-sns.histplot(single_mutant_fitness[single_mutant_fitness > 1.5], bins=20)
+sns.histplot(single_mutant_fitness, bins=20)
 plt.vlines(landscape.get_fitness([starting_sequence]), 0, 10, color='red', label='Starting sequence')
 plt.xlabel('Fitness')
+plt.ylim(0, 10)
 plt.show()
 
 #%%
@@ -275,7 +276,7 @@ def mutate_sequence_orthadox(sequence, starting_sequence=starting_sequence):
     idxs = [i for i in range(len(_starting_sequence)) if _starting_sequence[i] != _sequence[i]]
     if len(idxs) == 0:
         return mutate_sequence(sequence)
-    elif len(idxs) < 2 and np.random.rand() < 0.01:
+    elif len(idxs) < 3 and np.random.rand() < 0.01:
         return mutate_sequence(sequence)
     else:
         existing_mutation = np.random.choice(idxs)
@@ -373,7 +374,16 @@ np.random.seed(0)
 ## This is somewhat addressed by mutate_sequence_orthadox which
 ## only allows up to 2 total mutations from the starting sequence
 ##
-for start_from in [starting_sequence] + list(np.array(all_mutants)[y]):
+
+#%%
+from tqdm import tqdm
+
+designed_sequences = []
+
+dups = 0
+
+for start_from in tqdm([starting_sequence] + list(np.array(all_mutants)[y])):
+
     best_sequence, best_fitness = run_simulated_annealing(
         lda, 
         starting_sequence=start_from, 
@@ -381,7 +391,16 @@ for start_from in [starting_sequence] + list(np.array(all_mutants)[y]):
         cooling_rate=0.01, 
         num_iterations=1000,
         mutate_fn=mutate_sequence_orthadox)
-    print(f"{landscape.get_fitness([start_from])[0]:.3f} -> {landscape.get_fitness([best_sequence])[0]:.3f}")
+    
+    if best_sequence in list(np.array(all_mutants)[y]):
+        dups += 1
+        continue
+
+    designed_sequences.append(best_sequence)
+
+    # print(muts(best_sequence))
+    # print(f"{landscape.get_fitness([start_from])[0]:.3f} -> {landscape.get_fitness([best_sequence])[0]:.3f}")
+    # print()
 
     # print("Original fitness:", landscape.get_fitness([starting_sequence])[0])
     # print("Starting fitness:", landscape.get_fitness([start_from])[0])
@@ -389,5 +408,13 @@ for start_from in [starting_sequence] + list(np.array(all_mutants)[y]):
     # print("Best fitness (oracle):", landscape.get_fitness([best_sequence])[0])
     # print("Best fitness:", best_fitness)
 
-muts(best_sequence)
+designed_fitnesses = landscape.get_fitness(designed_sequences)
 # %%
+plt.figure()
+sns.histplot(single_mutant_fitness, bins=20, label='Single mutants', stat='density')
+sns.histplot(double_mutant_fitness, bins=20, label='Double mutants', stat='density')
+sns.histplot(designed_fitnesses, bins=20, label='Designed sequences', stat='density')
+plt.ylim(0, 0.1)
+plt.xlabel('Fitness')
+plt.legend()
+plt.show()
