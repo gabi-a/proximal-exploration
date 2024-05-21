@@ -33,7 +33,6 @@ args = get_args()
 
 landscape, alphabet, starting_sequence = get_landscape(args)
 
-
 # Create a single site saturation mutagenesis landscape by mutating each position in the starting sequence to each of the 20 amino acids in the alphabet
 def single_site_saturation_mutagenesis(alphabet, starting_sequence):
     mutants = []
@@ -85,3 +84,49 @@ plt.show()
 # %%
 print(max(single_mutant_fitness))
 print(max(double_mutant_fitness))
+
+#%%
+from typing import List
+
+def run_experiment(sequences: List[str], true_fitnesses: np.ndarray):
+
+    idxs = np.arange(len(sequences))
+
+    # Randomly oversample by some factor
+    # Note this does not _guarantee_ that every sequence is sampled even once
+    # so there may be some sequences that are not in the final dataset
+    oversample_factor = 10
+    idxs = np.random.choice(idxs, np.floor(oversample_factor * len(idxs)).astype(int), replace=True)
+
+    # Add biological noise to the true fitness
+    # TODO: Could make the noise depend on the true fitness, e.g. higher noise for higher fitness
+    biological_noise = np.random.normal(0, 0.1, len(idxs))
+    noisy_fitnesses = true_fitnesses[idxs] + biological_noise
+
+    # Add FACS measurement noise
+    FACS_noise = np.random.normal(0, 0.1, len(idxs))
+    FACS_measurements = noisy_fitnesses + FACS_noise
+
+    # Add Mother Machine measurement noise - get to measure multiple times
+    MM_measurements = []
+    for i in range(5):
+        MM_noise = np.random.normal(0, 0.1, len(idxs))
+        MM_measurements.extend(noisy_fitnesses + MM_noise)
+
+    return idxs, FACS_measurements, MM_measurements
+
+# %%
+plt.figure()
+idxs, FACS_data, MM_data = run_experiment(single_mutants, single_mutant_fitness)
+plt.scatter(FACS_data, np.array(MM_data).reshape(5, -1).mean(axis=0))
+plt.xlabel('FACS')
+plt.ylabel('Mother Machine (averaged)')
+plt.show()
+
+# %%
+plt.figure()
+for i in range(5):
+    plt.scatter(FACS_data, np.array(MM_data).reshape(5, -1)[i])
+plt.xlabel('FACS')
+plt.ylabel('Mother Machine')
+plt.show()
