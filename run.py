@@ -4,7 +4,7 @@ from algorithm import get_algorithm, algorithm_collection
 from model import get_model, model_collection
 from model.ensemble import ensemble_rules
 from utils.os_utils import get_arg_parser
-from utils.eval_utils import Runner
+from utils.eval_utils import Runner, RunnerBinarized
 
 def get_args():
     parser = get_arg_parser()
@@ -29,6 +29,9 @@ def get_args():
     parser.add_argument('--ensemble_size', help='number of model instances in ensemble', type=np.int32, default=3)
     parser.add_argument('--ensemble_rule', help='rule to aggregate the ensemble predictions', type=str, default='mean', choices=ensemble_rules.keys())
 
+    # runner arguments
+    parser.add_argument('--runner', help='runner', type=str, default='default', choices=['default', 'binarized'])
+
     args, _ = parser.parse_known_args()
     
     # PEX arguments
@@ -41,15 +44,22 @@ def get_args():
         parser.add_argument('--latent_dim', help='dimension of latent mutation embedding', type=np.int32, default=32)
         parser.add_argument('--context_radius', help='the radius of context window', type=np.int32, default=10)
 
+    # MuFacNetBinarized arguments
+    if args.net == 'mufacnetbinarized':
+        parser.add_argument('--latent_dim', help='dimension of latent mutation embedding', type=np.int32, default=32)
+        parser.add_argument('--context_radius', help='the radius of context window', type=np.int32, default=10)
+
     args = parser.parse_args()
     return args
 
 if __name__=='__main__':
     args = get_args()
+
+    runner = Runner if args.runner=='default' else RunnerBinarized
     
     landscape, alphabet, starting_sequence = get_landscape(args)
     model = get_model(args, alphabet=alphabet, starting_sequence=starting_sequence)
     explorer = get_algorithm(args, model=model, alphabet=alphabet, starting_sequence=starting_sequence)
 
-    runner = Runner(args)
+    runner = runner(args)
     runner.run(landscape, starting_sequence, model, explorer)
