@@ -22,7 +22,7 @@ class ProximalExploration:
     def propose_sequences(self, measured_sequences):
         # Input:  - measured_sequences: pandas.DataFrame
         #           - 'sequence':       [sequence_length]
-        #           - 'true_score':     float
+        #           - 'measured_score': float
         # Output: - query_batch:        [num_queries, sequence_length]
         #         - model_scores:       [num_queries]
         
@@ -58,12 +58,12 @@ class ProximalExploration:
         frontier_neighbors, frontier_height = [], -np.inf
         for distance_to_wt in sorted(measured_sequence_dict.keys()):
             data_list = measured_sequence_dict[distance_to_wt]
-            data_list.sort(reverse=True, key=lambda x:x['true_score'])
+            data_list.sort(reverse=True, key=lambda x:x['measured_score'])
             for data in data_list[:self.frontier_neighbor_size]:
-                if data['true_score'] > frontier_height:
+                if data['measured_score'] > frontier_height:
                     frontier_neighbors.append(data)
-            frontier_height = max(frontier_height, data_list[0]['true_score'])
-
+            frontier_height = max(frontier_height, data_list[0]['measured_score'])
+        
         # Construct the candiate pool by randomly mutating the sequences. (line 2 of Algorithm 2 in the paper)
         # An implementation heuristics: only mutating sequences near the proximal frontier.
         candidate_pool = []

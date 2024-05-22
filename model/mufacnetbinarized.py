@@ -44,7 +44,7 @@ class MuFacNetBinarized(nn.Module):
         return predictions
 
 @register_model("mufacnetbinarized")
-class MutationFactorizationModel(torch_model.TorchModel):
+class MutationFactorizationModelBinarized(torch_model.TorchModel):
     def __init__(self, args, alphabet, starting_sequence, **kwargs):
         super().__init__(
             args, alphabet,

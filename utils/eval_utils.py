@@ -34,10 +34,10 @@ class Runner:
             pd.DataFrame({
                 "round": round,
                 "sequence": sequences,
-                "true_score": true_scores
+                "measured_score": true_scores
             })
         )
-        print('round: {}  max fitness score: {:.3f}  running time: {:.2f} (sec)'.format(round, self.results['true_score'].max(), running_time))
+        print('round: {}  max fitness score: {:.3f}  running time: {:.2f} (sec)'.format(round, self.results['measured_score'].max(), running_time))
     
     @property
     def sequence_buffer(self):
@@ -45,7 +45,7 @@ class Runner:
 
     @property
     def fitness_buffer(self):
-        return self.results['true_score'].to_numpy()
+        return self.results['measured_score'].to_numpy()
     
 class RunnerBinarized:
     """
@@ -69,11 +69,18 @@ class RunnerBinarized:
             if round > 1:
                 model.train(self.sequence_buffer, self.fitness_buffer)
             
+
+            # TODO: Currently we measure each sequence _once_ and so only get a label of 1 or 0
+            #       However there should in reality be some coverage and some noise, such that
+            #       better sequences have a higher probability of being in the 1 class and 
+            #       worse have a higher probability of being in the 0 class.
+
+
             sequences, model_scores = explorer.propose_sequences(self.results)
             assert len(sequences) <= self.num_queries_per_round
             true_scores = landscape.get_fitness(sequences)
             measured_scores = np.zeros(len(true_scores), dtype=int)
-            threshold = np.percentile(true_scores, 50)
+            threshold = np.percentile(true_scores, 80)
             measured_scores[true_scores>=threshold] = 1
 
             round_running_time = time.time()-round_start_time
